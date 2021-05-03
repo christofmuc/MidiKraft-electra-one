@@ -43,6 +43,11 @@ namespace midikraft {
 		controllers_ = controllers;
 	}
 
+	bool isBoolParameter(std::shared_ptr<SynthParameterDefinition> param) {
+		auto intParam = std::dynamic_pointer_cast<SynthIntValueParameterCapability>(param);
+		return intParam && intParam->minValue() == 0 && intParam->maxValue() == 1;
+	}
+
 	std::string ElectraOneInstrumentDefinition::createJson(std::shared_ptr<Synth> synth)
 	{
 		// Check if the synth has a channel we need to create the value change messages later
@@ -91,7 +96,14 @@ namespace midikraft {
 		for (auto const &controller : controllers_) {
 			nlohmann::ordered_json parameter;
 			parameter["categoryId"] = "global";
-			parameter["type"] = "fader";
+			if (isBoolParameter(controller->param()) && overlaysCreated.find(controller->param()) == overlaysCreated.end()) {
+				// This is a parameter with only two values - we will use the Electra One "pad", which is really a toggle button
+				parameter["type"] = "pad";
+				parameter["mode"] = "toggle";
+			}
+			else {
+				parameter["type"] = "fader";
+			}
 			parameter["name"] = controller->name();
 			parameter["values"] = ElectraOnePreset::createValues(controller->param(), synthChannel, overlaysCreated);
 			instrument_definition["parameters"].push_back(parameter);
@@ -203,16 +215,30 @@ namespace midikraft {
 				//jassertfalse;
 			}
 		}
-		nlohmann::ordered_json message = {
-			{ "deviceId", 1},
-			{ "type", "sysex" },
-			{ "parameterNumber", intParam->sysexIndex() },
-			{"min", intParam->minValue() },
-			{"max", intParam->maxValue() },
-			//TODO construction of this array needs to go into a new capability. And sysexIndex() is wrong, it is actually the parameter number
-			{"data", { 0xf0, 0x42, 0x30 | channel.toZeroBasedInt(), 0x03, 0x41, intParam->sysexIndex(), { { "type", "value" }}, 0xf7}}
-		};
-		value["message"] = message;
+		if (isBoolParameter(param) && param->type() != SynthParameterDefinition::ParamType::LOOKUP && param->type() != SynthParameterDefinition::ParamType::LOOKUP_ARRAY) {
+			nlohmann::ordered_json message = {
+				{ "deviceId", 1},
+				{ "type", "sysex" },
+				{ "parameterNumber", intParam->sysexIndex() },
+				{"offValue", intParam->minValue() },
+				{"onValue", intParam->maxValue() },
+				//TODO construction of this array needs to go into a new capability. And sysexIndex() is wrong, it is actually the parameter number
+				{"data", { 0xf0, 0x42, 0x30 | channel.toZeroBasedInt(), 0x03, 0x41, intParam->sysexIndex(), { { "type", "value" }}, 0xf7}}
+			};
+			value["message"] = message;
+		}
+		else {
+			nlohmann::ordered_json message = {
+				{ "deviceId", 1},
+				{ "type", "sysex" },
+				{ "parameterNumber", intParam->sysexIndex() },
+				{"min", intParam->minValue() },
+				{"max", intParam->maxValue() },
+				//TODO construction of this array needs to go into a new capability. And sysexIndex() is wrong, it is actually the parameter number
+				{"data", { 0xf0, 0x42, 0x30 | channel.toZeroBasedInt(), 0x03, 0x41, intParam->sysexIndex(), { { "type", "value" }}, 0xf7}}
+			};
+			value["message"] = message;
+		}
 
 		result.push_back(value);
 		return result;
