@@ -33,19 +33,19 @@ namespace midikraft {
 
 	class ElectraOneParameter {
 	public:
-		ElectraOneParameter(ElectraOneControlType controlType, std::string const name, int physicalEncoderNumber) : controlType_(controlType), name_(name), encoderNumber_(physicalEncoderNumber) {
+		ElectraOneParameter(std::string const &group, std::string const &name, int physicalEncoderNumber) : groupName_(group), name_(name), encoderNumber_(physicalEncoderNumber) {
 			//jassert(physicalEncoderNumber >= 0 && physicalEncoderNumber <= 12);
 		}
 
 		std::string name() const;
-		ElectraOneControlType controlType() const;;
+		std::string group() const;
 		int encoderNumber() const { return encoderNumber_; }
 
 		virtual ElectraOneColor color() const = 0;
 		virtual std::shared_ptr<SynthParameterDefinition> param() const = 0;
 
 	private:
-		ElectraOneControlType controlType_;
+		std::string groupName_;
 		std::string name_;
 		int encoderNumber_;
 	};

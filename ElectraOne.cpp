@@ -29,9 +29,9 @@ namespace midikraft {
 		return name_;
 	}
 
-	ElectraOneControlType ElectraOneParameter::controlType() const
+	std::string ElectraOneParameter::group() const
 	{
-		return controlType_;
+		return groupName_;
 	}
 
 	ElectraOneInstrumentDefinition::ElectraOneInstrumentDefinition() 
@@ -65,7 +65,18 @@ namespace midikraft {
 		instrument_definition["manufacturer"] = "Korg";
 		instrument_definition["manufacturerId"] = "Korg";
 
-		instrument_definition["categories"] = nlohmann::json::array({ { "id", "global" }, { "label", "Globals" } });
+		instrument_definition["categories"] = nlohmann::json::array();
+		std::set<std::string> categories;
+		for (auto const &controller : controllers_) {
+			categories.insert(controller->group());
+		}
+		int categoryId = 1;
+		std::map<std::string, int> categoryMap;
+		for (auto const& category : categories) {
+			instrument_definition["categories"].push_back({ {"id", categoryId }, { "label", category} });
+			categoryMap[category] = categoryId;
+			categoryId++;
+		}
 
 		instrument_definition["overlays"] = nlohmann::json::array();
 		int overlayId = 1;
@@ -95,7 +106,7 @@ namespace midikraft {
 		
 		for (auto const &controller : controllers_) {
 			nlohmann::ordered_json parameter;
-			parameter["categoryId"] = "global";
+			parameter["categoryId"] = categoryMap[controller->group()];
 			if (isBoolParameter(controller->param()) && overlaysCreated.find(controller->param()) == overlaysCreated.end()) {
 				// This is a parameter with only two values - we will use the Electra One "pad", which is really a toggle button
 				parameter["type"] = "pad";
