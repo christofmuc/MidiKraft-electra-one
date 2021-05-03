@@ -63,6 +63,28 @@ namespace midikraft {
 		instrument_definition["categories"] = nlohmann::json::array({ { "id", "global" }, { "label", "Globals" } });
 
 		instrument_definition["overlays"] = nlohmann::json::array();
+		int overlayId = 1;
+		std::map<std::shared_ptr<SynthParameterDefinition>, int> overlaysCreated;
+		for (auto const &controller : controllers_) {
+			if (controller->param()->type() == SynthParameterDefinition::ParamType::LOOKUP || controller->param()->type() == SynthParameterDefinition::ParamType::LOOKUP_ARRAY) {
+				// It's a lookup parameter - create an "overlay" in Electra One terms
+				nlohmann::ordered_json overlay;
+				overlay["id"] = overlayId++;
+				overlay["name"] = controller->param()->name();
+				auto intParam = std::dynamic_pointer_cast<SynthIntValueParameterCapability>(controller->param());
+				auto lookupParam = std::dynamic_pointer_cast<SynthLookupParameterCapability>(controller->param());
+				if (intParam && lookupParam) {
+					for (int value = 0; value <= intParam->maxValue(); value++) {
+						overlay["items"].push_back({ {"value", value}, { "label",  lookupParam->valueAsText(value) } });
+					}
+					instrument_definition["overlays"].push_back(overlay);
+					overlaysCreated[controller->param()] = overlay["id"];
+				}
+				else {
+					SimpleLogger::instance()->postMessage("Need both SynthIntValueParameterCapability and SynthLookupParameterCapability to create overlay values");
+				}
+			}
+		}
 
 		instrument_definition["parameters"] = nlohmann::json::array();
 		
@@ -71,7 +93,7 @@ namespace midikraft {
 			parameter["categoryId"] = "global";
 			parameter["type"] = "fader";
 			parameter["name"] = controller->name();
-			parameter["values"] = ElectraOnePreset::createValues(controller->param(), synthChannel);
+			parameter["values"] = ElectraOnePreset::createValues(controller->param(), synthChannel, overlaysCreated);
 			instrument_definition["parameters"].push_back(parameter);
 		}
 
@@ -151,7 +173,7 @@ namespace midikraft {
 			nlohmann::json controllerMsg;
 			controllerMsg["deviceId"] = 1;
 
-			auto values = createValues(controller->param(), MidiChannel::fromZeroBase(0));
+			auto values = createValues(controller->param(), MidiChannel::fromZeroBase(0), {});
 			control["values"] = values;
 			control["inputs"] = nlohmann::json::array();
 			control["inputs"].push_back({ {"podId", controller->encoderNumber() }, { "valueId", values[0]["id"]} });
@@ -161,41 +183,38 @@ namespace midikraft {
 		}
 	}
 
-	nlohmann::ordered_json ElectraOnePreset::createValues(std::shared_ptr<SynthParameterDefinition> param, MidiChannel channel)
+	nlohmann::ordered_json ElectraOnePreset::createValues(std::shared_ptr<SynthParameterDefinition> param, MidiChannel channel, std::map<std::shared_ptr<SynthParameterDefinition>, int> overlaysCreated)
 	{
 		nlohmann::ordered_json result = nlohmann::ordered_json::array();
 
-		switch (param->type()) {
-		case SynthParameterDefinition::ParamType::INT: {
-			auto intParam = std::dynamic_pointer_cast<SynthIntParameterCapability>(param);
-			nlohmann::ordered_json value = {
-				{ "id", param->name() },
-				{"min", intParam->minValue() },
-				{"max", intParam->maxValue() },
-				{"defaultValue", 0}
-			};
-			nlohmann::ordered_json message = {
-				{ "deviceId", 1},
-				{ "type", "sysex" },
-				{ "parameterNumber", intParam->sysexIndex() },
-				{"min", intParam->minValue() },
-				{"max", intParam->maxValue() },
-				//TODO construction of this array needs to go into a new capability. And sysexIndex() is wrong, it is actually the parameter number
-				{"data", { 0xf0, 0x42, 0x30 | channel.toZeroBasedInt(), 0x03, 0x41, intParam->sysexIndex(), { { "type", "value" }}, 0xf7}}
-			};
-			value["message"] = message;
-
-			result.push_back(value);
-			break;
+		auto intParam = std::dynamic_pointer_cast<SynthIntParameterCapability>(param);
+		nlohmann::ordered_json value = {
+			{ "id", param->name() },
+			{"min", intParam->minValue() },
+			{"max", intParam->maxValue() },
+			{"defaultValue", 0}
+		};
+		auto lookupParam = std::dynamic_pointer_cast<SynthLookupParameterCapability>(param);
+		if (lookupParam) {
+			if (overlaysCreated.find(param) != overlaysCreated.end()) {
+				value["overlayId"] = overlaysCreated[param];
+			}
+			else {
+				//jassertfalse;
+			}
 		}
-		case SynthParameterDefinition::ParamType::INT_ARRAY:
-		case SynthParameterDefinition::ParamType::LOOKUP:
-		case SynthParameterDefinition::ParamType::LOOKUP_ARRAY:
-			// Not supported
-			//jassertfalse;
-			break;
-		}
+		nlohmann::ordered_json message = {
+			{ "deviceId", 1},
+			{ "type", "sysex" },
+			{ "parameterNumber", intParam->sysexIndex() },
+			{"min", intParam->minValue() },
+			{"max", intParam->maxValue() },
+			//TODO construction of this array needs to go into a new capability. And sysexIndex() is wrong, it is actually the parameter number
+			{"data", { 0xf0, 0x42, 0x30 | channel.toZeroBasedInt(), 0x03, 0x41, intParam->sysexIndex(), { { "type", "value" }}, 0xf7}}
+		};
+		value["message"] = message;
 
+		result.push_back(value);
 		return result;
 	}
 

@@ -34,7 +34,7 @@ namespace midikraft {
 	class ElectraOneParameter {
 	public:
 		ElectraOneParameter(ElectraOneControlType controlType, std::string const name, int physicalEncoderNumber) : controlType_(controlType), name_(name), encoderNumber_(physicalEncoderNumber) {
-			jassert(physicalEncoderNumber >= 0 && physicalEncoderNumber <= 12);
+			//jassert(physicalEncoderNumber >= 0 && physicalEncoderNumber <= 12);
 		}
 
 		std::string name() const;
@@ -72,7 +72,7 @@ namespace midikraft {
 
 		std::string createJson(MidiChannel channel);
 
-		static nlohmann::ordered_json createValues(std::shared_ptr<SynthParameterDefinition> param, MidiChannel channel);
+		static nlohmann::ordered_json createValues(std::shared_ptr<SynthParameterDefinition> param, MidiChannel channel, std::map<std::shared_ptr<SynthParameterDefinition>, int> overlaysCreated);
 
 	private:
 		void createControllers(nlohmann::ordered_json &preset);
